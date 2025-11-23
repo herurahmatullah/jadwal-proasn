@@ -1,0 +1,335 @@
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Button,
+  Input,
+  Label,
+} from './ui';
+import { Search, Moon, Sun, LogOut, ChevronDown } from 'lucide-react';
+import { useTheme } from './ThemeProvider';
+
+// Format jam dari string (contoh input: "13:00 WIB", "13:00", "13.00 WIB")
+function formatJamTes(raw) {
+  if (!raw) return '-';
+  if (typeof raw !== 'string') return '-';
+
+  let s = raw.trim().toUpperCase();
+
+  // Ambil pola HH:MM atau HH.MM
+  const match = s.match(/(\d{1,2})[:.](\d{2})/);
+  if (!match) {
+    // kalau tidak ketemu pola, tambahkan WIB saja
+    return s.includes('WIB') ? s : `${s} WIB`;
+  }
+
+  const [, h, m] = match;
+  const jam = `${h.padStart(2, '0')}.${m}`;
+  return s.includes('WIB') ? `${jam} WIB` : `${jam} WIB`;
+}
+
+function AttendanceApp() {
+  // GANTI DENGAN URL GOOGLE APPS SCRIPT JADWAL ANDA
+  const SCRIPT_URL =    'https://script.google.com/macros/s/AKfycbyAlqbpd1yMTzg0x-RHo5A2mH-hkJtSGc8ZHGaweF4V4EkbCjOk1ihsPK16bSMvRHQg8A/exec';
+
+  const { theme, setTheme } = useTheme();
+  const [employees, setEmployees] = useState([]);
+  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [nipInput, setNipInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [error, setError] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Load daftar pegawai untuk dropdown
+  useEffect(() => {
+    loadAllEmployees();
+  }, []);
+
+  const loadAllEmployees = async () => {
+    setLoadingEmployees(true);
+    try {
+      const response = await fetch(SCRIPT_URL);
+      const data = await response.json();
+      setEmployees(data || []);
+    } catch (error) {
+      console.error('Gagal memuat daftar pegawai:', error);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  const searchEmployee = async () => {
+    if (!nipInput.trim()) {
+      setError('Mohon masukkan NIP atau nama');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(SCRIPT_URL);
+      const data = await response.json();
+
+      const keyword = nipInput.trim().toLowerCase();
+      const employee = (data || []).find(
+        (emp) =>
+          emp.nip === nipInput.trim() ||
+          emp.nama?.toLowerCase().includes(keyword)
+      );
+
+      if (employee) {
+        const jamTerformat = formatJamTes(employee.waktuTes || employee.jamTes);
+
+        setCurrentEmployee({
+          ...employee,
+          waktuTes: jamTerformat,
+        });
+        setError('');
+        setShowDropdown(false);
+      } else {
+        setError('Data tidak ditemukan. Silakan cek kembali.');
+        setCurrentEmployee(null);
+      }
+    } catch (error) {
+      setError('Gagal memuat data: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectEmployeeFromDropdown = (employee) => {
+    setNipInput(employee.nip);
+    setShowDropdown(false);
+    // Auto search setelah pilih
+    setTimeout(() => {
+      const btn = document.querySelector('[data-search-btn]');
+      if (btn) btn.click();
+    }, 100);
+  };
+
+  const logout = () => {
+    setCurrentEmployee(null);
+    setNipInput('');
+    setError('');
+  };
+
+  const filteredEmployees = employees.filter(
+    (emp) =>
+      emp.nama?.toLowerCase().includes(nipInput.toLowerCase()) ||
+      emp.nip?.includes(nipInput)
+  );
+
+  // ================= HALAMAN 1: FORM CARI =================
+  if (!currentEmployee) {
+    return (
+      <div className="min-h-screen transition-colors flex items-start justify-center pt-24 md:pt-24">
+        <Card className="w-full max-w-md dark:bg-slate-800 dark:border-slate-700">
+          <CardHeader>
+            <div className="flex justify-between items-start mb-4">
+              <div className="text-left">
+                <CardTitle className="text-2xl dark:text-slate-100">
+                  Jadwal ProASN Kabupaten Lingga
+                </CardTitle>
+                <CardDescription className="dark:text-slate-400 mt-2">
+                  Masukkan NIP/nama untuk cek jadwal tes ProASN
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl bg-white text-slate-900 shadow dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nip" className="dark:text-slate-200">
+                Nomor Induk Pegawai (NIP)
+              </Label>
+              <div className="relative">
+				  <Input
+					id="nip"
+					placeholder="Contoh: 198501012010011001"
+					value={nipInput}
+					onChange={(e) => {
+					  setNipInput(e.target.value);
+					  setShowDropdown(true);
+					}}
+					onFocus={() => setShowDropdown(true)}
+					onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+					className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 pr-10"
+					disabled={loading}
+				  />
+
+				  {showDropdown && filteredEmployees.length > 0 && nipInput.length > 0 && (
+					<div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md shadow-lg max-h-60 overflow-auto">
+					  <div className="py-1">
+						{filteredEmployees.map((emp) => (
+						  <button
+							key={emp.id}
+							type="button"
+							onClick={() => selectEmployeeFromDropdown(emp)}
+							className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+						  >
+							<div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+							  {emp.nama}
+							</div>
+							<div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+							  {emp.nip}
+							</div>
+						  </button>
+						))}
+					  </div>
+					</div>
+				  )}
+				</div>
+              {error && (
+                <p className="text-sm text-red-500 dark:text-red-400">
+                  {error}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              data-search-btn
+              onClick={searchEmployee}
+              disabled={loading || !nipInput.trim()}
+              className="w-full"
+            >
+              {loading ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Mencari...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 mr-2" />
+                  Cari Data
+                </>
+              )}
+            </Button>
+
+            <div className="pt-4 border-t dark:border-slate-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Klik dropdown untuk melihat daftar peserta terdaftar
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ================= HALAMAN 2: TAMPILKAN JADWAL =================
+  return (
+    <div className="min-h-screen transition-colors flex items-start justify-center pt-24 md:pt-24">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div className="text-left">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+              Jadwal Tes ProASN
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              NIP: {currentEmployee.nip}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl bg-white text-slate-900 shadow dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={logout}
+              className="gap-2 rounded-xl bg-white text-slate-900 shadow dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700"
+            >
+              <LogOut className="w-4 h-4" />
+              Keluar
+            </Button>
+          </div>
+        </div>
+
+        {/* Card Jadwal */}
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
+          <CardHeader>
+            <div className="flex flex-col items-center justify-center space-y-1 text-center">
+              <CardTitle className="text-xl md:text-2xl font-semibold dark:text-slate-100">
+                {currentEmployee.nama}
+              </CardTitle>
+              <CardDescription className="font-mono text-sm md:text-base dark:text-slate-300">
+                NIP: {currentEmployee.nip}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
+              Jadwal Tes ProASN Anda:
+            </p>
+            <div className="space-y-3 text-sm md:text-base">
+              <div className="flex justify-between">
+                <span className="font-medium text-left">Perangkat Daerah</span>
+                <span className="text-right max-w-[65%]">
+                  {currentEmployee.opd || '-'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-left">Tanggal</span>
+                <span className="text-right max-w-[65%]">
+                  {currentEmployee.tanggalTes || '-'}
+                </span>
+              </div>
+			  <div className="flex justify-between">
+				<span className="font-medium text-left">Hari</span>
+				<span className="text-right max-w-[65%]">
+				  {currentEmployee.hariTes || currentEmployee.hari || '-'}
+				</span>
+			  </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-left">Waktu</span>
+                <span className="text-right max-w-[65%]">
+                  {currentEmployee.waktuTes || '-'}
+                </span>
+              </div>
+			  <div className="flex justify-between">
+                <span className="font-medium text-left">Lokasi</span>
+                <span className="text-right max-w-[65%]">
+                  {currentEmployee.lokasiTes || '-'}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="text-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Data jadwal diambil otomatis dari sistem ProASN
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default AttendanceApp;

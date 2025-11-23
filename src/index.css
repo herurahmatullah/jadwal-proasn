@@ -1,0 +1,28 @@
+/* Reset & full height */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Tema terang: seluruh layar terang */
+html.light body {
+  background: #f4f6fa;
+  color: #0f172a;
+}
+
+/* Tema gelap: seluruh layar gelap */
+html.dark body {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+/* Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
